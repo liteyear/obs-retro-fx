@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+package/
+dist/
+tests/render_harness
+tests/rendered/
+tests/*.log
+*.o

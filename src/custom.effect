@@ -1,0 +1,44 @@
+// Liteyear Retro FX: GPU helpers and procedural digital glitch, GPL-2.0.
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform float2 uv_size;
+uniform float2 direction;
+uniform float time;
+uniform float amount;
+uniform float block_width;
+uniform float block_height;
+uniform float displacement;
+uniform float color_drift;
+sampler_state smp { Filter = Linear; AddressU = Clamp; AddressV = Clamp; };
+sampler_state nearest_smp { Filter = Point; AddressU = Clamp; AddressV = Clamp; };
+struct VertData { float4 pos : POSITION; float2 uv : TEXCOORD0; };
+VertData VS(VertData v) { v.pos = mul(float4(v.pos.xyz, 1.0), ViewProj); return v; }
+float4 Copy(VertData v) : TARGET { return image.Sample(smp, v.uv); }
+float4 PointCopy(VertData v) : TARGET { return image.Sample(nearest_smp, v.uv); }
+float4 Blur(VertData v) : TARGET {
+    float2 d = direction / uv_size;
+    float4 c = image.Sample(smp, v.uv) * 0.2270270270;
+    c += image.Sample(smp, v.uv + d * 1.3846153846) * 0.3162162162;
+    c += image.Sample(smp, v.uv - d * 1.3846153846) * 0.3162162162;
+    c += image.Sample(smp, v.uv + d * 3.2307692308) * 0.0702702703;
+    c += image.Sample(smp, v.uv - d * 3.2307692308) * 0.0702702703;
+    return c;
+}
+float noise(float2 p) { return frac(sin(dot(p, float2(127.1,311.7))) * 43758.5453); }
+float4 Glitch(VertData v) : TARGET {
+    float2 cell = floor(v.uv * uv_size / float2(block_width, block_height));
+    float t = floor(time);
+    float r = noise(cell + float2(t * 17.0, t));
+    float block_gate = step(1.0 - amount, r);
+    float dx = (noise(cell + t + 7.0) * 2.0 - 1.0) * displacement * block_gate;
+    float drift = (noise(float2(cell.y, t + 31.0)) * 2.0 - 1.0) * color_drift * block_gate;
+    float2 uv = v.uv + float2(dx / uv_size.x, 0.0);
+    float4 c = image.Sample(smp, uv);
+    c.r = image.Sample(smp, uv + float2(drift / uv_size.x, 0.0)).r;
+    c.b = image.Sample(smp, uv - float2(drift / uv_size.x, 0.0)).b;
+    return c;
+}
+technique Draw { pass { vertex_shader = VS(v); pixel_shader = Copy(v); } }
+technique DrawPoint { pass { vertex_shader = VS(v); pixel_shader = PointCopy(v); } }
+technique DrawBlur { pass { vertex_shader = VS(v); pixel_shader = Blur(v); } }
+technique DrawGlitch { pass { vertex_shader = VS(v); pixel_shader = Glitch(v); } }
